@@ -114,6 +114,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ currentUser }) => {
                     return;
                 }
 
+                console.log('Creating new user:', formEmail);
                 const { data: authData, error: authError } = await supabase.auth.signUp({
                     email: formEmail,
                     password: formPassword,
@@ -124,20 +125,34 @@ const UserManagement: React.FC<UserManagementProps> = ({ currentUser }) => {
                     }
                 });
 
-                if (authError) throw authError;
+                if (authError) {
+                    console.error('Auth error:', authError);
+                    throw authError;
+                }
 
-                // Update the profile with role and states
+                console.log('Auth user created:', authData.user?.id);
+
+                // Wait for the trigger to create the profile
                 if (authData.user) {
+                    // Wait a moment for the trigger to create the profile
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+
+                    // Use upsert to handle both insert and update cases
                     const { error: profileError } = await supabase
                         .from('profiles')
-                        .update({
+                        .upsert({
+                            id: authData.user.id,
+                            email: formEmail,
                             full_name: formName,
                             role: formRole,
                             states: formStates
-                        })
-                        .eq('id', authData.user.id);
+                        }, { onConflict: 'id' });
 
-                    if (profileError) throw profileError;
+                    if (profileError) {
+                        console.error('Profile error:', profileError);
+                        throw profileError;
+                    }
+                    console.log('Profile updated successfully');
                 }
             }
 
@@ -145,7 +160,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ currentUser }) => {
             fetchUsers();
         } catch (err: any) {
             console.error('Erro ao salvar usuário:', err);
-            setError(err.message || 'Erro ao salvar usuário');
+            setError(err.message || 'Database error saving new user');
         } finally {
             setSaving(false);
         }
@@ -322,8 +337,8 @@ const UserManagement: React.FC<UserManagementProps> = ({ currentUser }) => {
                                                 type="button"
                                                 onClick={() => toggleState(state)}
                                                 className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${formStates.includes(state)
-                                                        ? 'bg-primary text-white'
-                                                        : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'
+                                                    ? 'bg-primary text-white'
+                                                    : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'
                                                     }`}
                                             >
                                                 {state}
