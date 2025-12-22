@@ -27,7 +27,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
       const timeoutId = setTimeout(() => {
         setLoading(false);
         setError('A conexão com o servidor está levando muito tempo. Tente novamente.');
-      }, 30000);
+      }, 60000);
 
       try {
         const { data, error: signInError } = await supabase.auth.signInWithPassword({

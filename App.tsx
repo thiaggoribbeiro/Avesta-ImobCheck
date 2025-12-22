@@ -27,7 +27,7 @@ const App: React.FC = () => {
       // Safety timeout to ensure loading spinner disappears even if Supabase hangs
       const timeoutId = setTimeout(() => {
         setLoading(false);
-      }, 30000);
+      }, 60000);
 
       try {
         const { data: { session } } = await supabase.auth.getSession();

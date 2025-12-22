@@ -22,7 +22,7 @@ const ServiceRequests: React.FC<ServiceRequestsProps> = ({ currentUser }) => {
 
         const timeoutId = setTimeout(() => {
             setLoading(false);
-        }, 30000);
+        }, 60000);
 
         try {
             let query = supabase

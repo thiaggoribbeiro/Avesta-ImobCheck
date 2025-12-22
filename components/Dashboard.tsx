@@ -29,7 +29,7 @@ const Dashboard: React.FC<DashboardProps> = ({ currentUser }) => {
 
         const timeoutId = setTimeout(() => {
             setLoading(false);
-        }, 30000);
+        }, 60000);
 
         try {
             // Build query based on role
