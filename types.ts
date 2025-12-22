@@ -1,5 +1,5 @@
 
-export type View = 'login' | 'list' | 'details' | 'settings' | 'services' | 'dashboard';
+export type View = 'login' | 'list' | 'details' | 'settings' | 'services' | 'dashboard' | 'add-property';
 
 export interface MaintenanceRecord {
   id: string;
@@ -7,7 +7,7 @@ export interface MaintenanceRecord {
   title: string;
   description: string;
   date: string;
-  status: 'Concluído' | 'Pendente' | 'Em Progresso';
+  status: 'Concluído' | 'Pendente' | 'Em Andamento' | 'Não Realizado' | 'Aprovado';
   icon: string;
   colorClass: string;
 }
@@ -44,10 +44,13 @@ export interface ServiceRequest {
   description: string;
   service_type: 'reparo' | 'reforma' | 'pintura' | 'limpeza' | 'obra' | 'outro';
   photos: string[];
-  status: 'pendente' | 'aprovado' | 'rejeitado' | 'concluido';
+  status: 'pendente' | 'aprovado' | 'rejeitado';
+  status_execucao?: 'em_andamento' | 'concluido' | 'nao_realizado';
   approved_by?: string;
   approved_at?: string;
   rejection_reason?: string;
+  valor?: number;
+  documento_url?: string;
   created_at: string;
   updated_at: string;
 }
