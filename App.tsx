@@ -22,55 +22,61 @@ const App: React.FC = () => {
   const [fetchingProperties, setFetchingProperties] = useState(false);
 
   useEffect(() => {
-    // Check active sessions and subscribe to auth changes
+    let mounted = true;
+
     const checkUser = async () => {
-      // Safety timeout to ensure loading spinner disappears even if Supabase hangs
       const timeoutId = setTimeout(() => {
-        setLoading(false);
-      }, 60000);
+        if (mounted) setLoading(false);
+      }, 15000); // 15s timeout para o check inicial
 
       try {
         const { data: { session } } = await supabase.auth.getSession();
 
-        if (session?.user) {
-          const { data: profile, error: profileError } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', session.user.id)
-            .single();
+        if (session?.user && mounted) {
+          const profileFetch = supabase.from('profiles').select('*').eq('id', session.user.id).single();
+          const profileTimeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout Profile')), 20000));
 
-          if (profile) {
+          const { data: profile } = await Promise.race([profileFetch, profileTimeout]) as any;
+
+          if (profile && mounted) {
             setUser(profile);
             setCurrentView('list');
-          } else if (profileError) {
-            console.error('Erro ao buscar perfil:', profileError);
           }
-        } else {
+        } else if (mounted) {
           setCurrentView('login');
         }
       } catch (err) {
-        console.error('Erro na verificação de usuário:', err);
+        console.error('App Profile Load Error:', err);
       } finally {
-        clearTimeout(timeoutId);
-        setLoading(false);
+        if (mounted) {
+          clearTimeout(timeoutId);
+          setLoading(false);
+        }
       }
     };
 
     checkUser();
 
     const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (session?.user) {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', session.user.id)
-          .single();
+      if (!mounted) return;
 
-        if (profile) {
-          setUser(profile);
-          setCurrentView('list');
+      if (session?.user) {
+        if (currentView === 'login' || !user) {
+          try {
+            const profileFetch = supabase.from('profiles').select('*').eq('id', session.user.id).single();
+            const profileTimeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout Auth Update')), 20000));
+
+            const { data: profile } = await Promise.race([profileFetch, profileTimeout]) as any;
+
+            if (profile && mounted) {
+              setUser(profile);
+              setCurrentView('list');
+            }
+          } catch (err) {
+            console.error('Auth State Profile Load Error:', err);
+          }
         }
-      } else {
+      } else if (mounted) {
         setUser(null);
         setCurrentView('login');
         setProperties([]);
@@ -78,6 +84,7 @@ const App: React.FC = () => {
     });
 
     return () => {
+      mounted = false;
       authListener.subscription.unsubscribe();
     };
   }, []);

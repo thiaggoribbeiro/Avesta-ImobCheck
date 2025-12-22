@@ -1,0 +1,12 @@
+/* Estilos globais básicos */
+:root {
+  font-family: 'Manrope', sans-serif;
+}
+
+body {
+  margin: 0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Adicione estilos personalizados aqui se necessário */
