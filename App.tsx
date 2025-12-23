@@ -142,7 +142,7 @@ const App: React.FC = () => {
         return;
       }
 
-      const { data, error } = await query;
+      const { data, error: _error } = await query;
 
       const formattedProperties: Property[] = (data || []).map(p => ({
         id: p.id,

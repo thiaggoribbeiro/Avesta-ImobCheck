@@ -13,12 +13,12 @@ export const getAIPropertyInsights = async (property: Property) => {
     Analise o seguinte imóvel e seu histórico de manutenção e forneça uma breve recomendação estratégica para o gestor.
     
     Nome: ${property.nome_completo}
-    Endereço: ${property.endereco}, ${property.bairro}, ${property.cidade}
+    Endereço: ${property.endereco}, ${property.bairro}, ${property.cidade} - ${property.estado}
     Situação: ${property.situacao}
     Utilização: ${property.utilizacao}
     Proprietário: ${property.proprietario}
-    Locatário: ${property.locatario}
-    Valor Aluguel Mercado: ${property.valor_aluguel_mercado}
+    Prefeito Responsável: ${property.prefeito}
+    Região: ${property.regiao}
     Histórico:
     ${historyStr || 'Nenhum histórico registrado.'}
     

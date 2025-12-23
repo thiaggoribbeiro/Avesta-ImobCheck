@@ -140,26 +140,58 @@ const PropertyDetails: React.FC<PropertyDetailsProps> = ({ property, userId, onS
           <button className="text-primary text-sm font-bold hover:bg-primary/5 px-2 py-1 rounded-md transition-colors">Ver Todos</button>
         </div>
         <div className="grid grid-cols-[48px_1fr] px-4">
-          {property.maintenanceHistory.length > 0 ? property.maintenanceHistory.map((item, idx) => (
-            <React.Fragment key={item.id}>
-              <div className="flex flex-col items-center">
-                <div className={`relative z-10 rounded-full bg-${item.colorClass}-50 dark:bg-${item.colorClass}-900/20 border border-${item.colorClass}-100 dark:border-${item.colorClass}-800 p-2 flex items-center justify-center`}>
-                  <span className={`material-symbols-outlined text-${item.colorClass}-600 dark:text-${item.colorClass}-400 text-[20px]`}>{item.icon}</span>
+          {property.maintenanceHistory.length > 0 ? property.maintenanceHistory.map((item, idx) => {
+            // Map color classes statically to avoid Tailwind purging issues
+            const colorMap: Record<string, { bg: string; border: string; text: string }> = {
+              blue: {
+                bg: 'bg-blue-50 dark:bg-blue-900/20',
+                border: 'border-blue-100 dark:border-blue-800',
+                text: 'text-blue-600 dark:text-blue-400'
+              },
+              orange: {
+                bg: 'bg-orange-50 dark:bg-orange-900/20',
+                border: 'border-orange-100 dark:border-orange-800',
+                text: 'text-orange-600 dark:text-orange-400'
+              },
+              purple: {
+                bg: 'bg-purple-50 dark:bg-purple-900/20',
+                border: 'border-purple-100 dark:border-purple-800',
+                text: 'text-purple-600 dark:text-purple-400'
+              },
+              green: {
+                bg: 'bg-green-50 dark:bg-green-900/20',
+                border: 'border-green-100 dark:border-green-800',
+                text: 'text-green-600 dark:text-green-400'
+              },
+              red: {
+                bg: 'bg-red-50 dark:bg-red-900/20',
+                border: 'border-red-100 dark:border-red-800',
+                text: 'text-red-600 dark:text-red-400'
+              }
+            };
+            const colors = colorMap[item.colorClass] || colorMap.blue;
+
+            return (
+              <React.Fragment key={item.id}>
+                <div className="flex flex-col items-center">
+                  <div className={`relative z-10 rounded-full ${colors.bg} border ${colors.border} p-2 flex items-center justify-center`}>
+                    <span className={`material-symbols-outlined ${colors.text} text-[20px]`}>{item.icon}</span>
+                  </div>
+                  {idx < property.maintenanceHistory.length - 1 && (
+                    <div className="w-[2px] bg-gray-200 dark:bg-gray-700 h-full grow -mt-2 pt-2"></div>
+                  )}
                 </div>
-                {idx < property.maintenanceHistory.length - 1 && (
-                  <div className="w-[2px] bg-gray-200 dark:bg-gray-700 h-full grow -mt-2 pt-2"></div>
-                )}
-              </div>
-              <div className="flex flex-1 flex-col pb-6 pl-2 pt-1">
-                <div className="flex justify-between items-start">
-                  <p className="text-[#0d141b] dark:text-white text-base font-bold leading-tight">{item.title}</p>
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-green-600 dark:text-green-400 bg-green-100 dark:bg-green-900/30 px-2 py-1 rounded-md">{item.status}</span>
+                <div className="flex flex-1 flex-col pb-6 pl-2 pt-1">
+                  <div className="flex justify-between items-start">
+                    <p className="text-[#0d141b] dark:text-white text-base font-bold leading-tight">{item.title}</p>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-green-600 dark:text-green-400 bg-green-100 dark:bg-green-900/30 px-2 py-1 rounded-md">{item.status}</span>
+                  </div>
+                  <p className="text-[#4c739a] dark:text-slate-400 text-sm font-normal leading-relaxed mt-1">{item.description}</p>
+                  <p className="text-xs font-medium text-gray-400 dark:text-gray-500 mt-2">{item.date}</p>
                 </div>
-                <p className="text-[#4c739a] dark:text-slate-400 text-sm font-normal leading-relaxed mt-1">{item.description}</p>
-                <p className="text-xs font-medium text-gray-400 dark:text-gray-500 mt-2">{item.date}</p>
-              </div>
-            </React.Fragment>
-          )) : (
+              </React.Fragment>
+            )
+          }) : (
             <div className="col-span-2 text-center py-4 text-slate-400 text-sm">Nenhum histórico registrado.</div>
           )}
         </div>
