@@ -10,7 +10,7 @@ interface ServiceRequestsProps {
 const ServiceRequests: React.FC<ServiceRequestsProps> = ({ currentUser }) => {
     const [requests, setRequests] = useState<(ServiceRequest & { property_address?: string; requester_name?: string })[]>([]);
     const [loading, setLoading] = useState(true);
-    const [filter, setFilter] = useState<'pendente' | 'aprovado' | 'rejeitado' | 'todos'>('pendente');
+    const [filter, setFilter] = useState<'pendente' | 'aprovado' | 'finalizado' | 'rejeitado' | 'todos'>('pendente');
     const [processingId, setProcessingId] = useState<string | null>(null);
 
     useEffect(() => {
@@ -39,8 +39,15 @@ const ServiceRequests: React.FC<ServiceRequestsProps> = ({ currentUser }) => {
                 query = query.eq('requester_id', currentUser.id);
             }
 
-            if (filter !== 'todos') {
-                query = query.eq('status', filter);
+
+            if (filter === 'pendente') {
+                query = query.eq('status', 'pendente');
+            } else if (filter === 'aprovado') {
+                query = query.eq('status', 'aprovado').eq('status_execucao', 'em_andamento');
+            } else if (filter === 'finalizado') {
+                query = query.eq('status', 'aprovado').in('status_execucao', ['concluido', 'nao_realizado']);
+            } else if (filter === 'rejeitado') {
+                query = query.eq('status', 'rejeitado');
             }
 
             const { data, error } = await query;
@@ -69,6 +76,7 @@ const ServiceRequests: React.FC<ServiceRequestsProps> = ({ currentUser }) => {
                 .from('service_requests')
                 .update({
                     status: 'aprovado',
+                    status_execucao: 'em_andamento',
                     approved_by: currentUser.id,
                     approved_at: new Date().toISOString()
                 })
@@ -109,12 +117,35 @@ const ServiceRequests: React.FC<ServiceRequestsProps> = ({ currentUser }) => {
         }
     };
 
+    const handleUpdateExecutionStatus = async (requestId: string, newExecStatus: 'concluido' | 'nao_realizado') => {
+        setProcessingId(requestId);
+        try {
+            const { error } = await supabase
+                .from('service_requests')
+                .update({
+                    status_execucao: newExecStatus,
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', requestId);
+
+            if (error) throw error;
+            fetchRequests();
+        } catch (err) {
+            console.error('Erro ao atualizar status de execução:', err);
+            alert('Erro ao atualizar status');
+        } finally {
+            setProcessingId(null);
+        }
+    };
+
     const getStatusColor = (status: string) => {
         switch (status) {
             case 'pendente': return 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400';
             case 'aprovado': return 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400';
             case 'rejeitado': return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400';
-            case 'concluido': return 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400';
+            case 'em_andamento': return 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400';
+            case 'concluido': return 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400';
+            case 'nao_realizado': return 'bg-slate-100 text-slate-800 dark:bg-slate-900/30 dark:text-slate-400';
             default: return 'bg-gray-100 text-gray-800';
         }
     };
@@ -124,7 +155,9 @@ const ServiceRequests: React.FC<ServiceRequestsProps> = ({ currentUser }) => {
             case 'pendente': return 'Pendente';
             case 'aprovado': return 'Aprovado';
             case 'rejeitado': return 'Rejeitado';
+            case 'em_andamento': return 'Em Andamento';
             case 'concluido': return 'Concluído';
+            case 'nao_realizado': return 'Não Realizado';
             default: return status;
         }
     };
@@ -167,7 +200,7 @@ const ServiceRequests: React.FC<ServiceRequestsProps> = ({ currentUser }) => {
 
             {/* Filtros */}
             <div className="flex gap-2 overflow-x-auto pb-2">
-                {(['pendente', 'aprovado', 'rejeitado', 'todos'] as const).map((f) => (
+                {(['pendente', 'aprovado', 'finalizado', 'rejeitado', 'todos'] as const).map((f) => (
                     <button
                         key={f}
                         onClick={() => setFilter(f)}
@@ -176,7 +209,7 @@ const ServiceRequests: React.FC<ServiceRequestsProps> = ({ currentUser }) => {
                             : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
                             }`}
                     >
-                        {f === 'pendente' ? 'Pendentes' : f === 'aprovado' ? 'Aprovados' : f === 'rejeitado' ? 'Rejeitados' : 'Todos'}
+                        {f === 'pendente' ? 'Pendentes' : f === 'aprovado' ? 'Aprovados' : f === 'finalizado' ? 'Finalizados' : f === 'rejeitado' ? 'Rejeitados' : 'Todos'}
                     </button>
                 ))}
             </div>
@@ -198,9 +231,16 @@ const ServiceRequests: React.FC<ServiceRequestsProps> = ({ currentUser }) => {
                                 <div className="flex-1 min-w-0">
                                     <div className="flex items-center gap-2 mb-1 flex-wrap">
                                         <h3 className="text-slate-900 dark:text-white font-bold truncate">{request.title}</h3>
-                                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase ${getStatusColor(request.status)}`}>
-                                            {getStatusLabel(request.status)}
-                                        </span>
+                                        <div className="flex gap-1.5 flex-wrap">
+                                            <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase ${getStatusColor(request.status)}`}>
+                                                {getStatusLabel(request.status)}
+                                            </span>
+                                            {request.status === 'aprovado' && request.status_execucao && (
+                                                <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase ${getStatusColor(request.status_execucao)}`}>
+                                                    {getStatusLabel(request.status_execucao)}
+                                                </span>
+                                            )}
+                                        </div>
                                     </div>
                                     <p className="text-slate-500 dark:text-slate-400 text-sm truncate">{request.property_address}</p>
                                 </div>
@@ -251,6 +291,39 @@ const ServiceRequests: React.FC<ServiceRequestsProps> = ({ currentUser }) => {
                                             <>
                                                 <span className="material-symbols-outlined text-lg">cancel</span>
                                                 Rejeitar
+                                            </>
+                                        )}
+                                    </button>
+                                </div>
+                            )}
+
+                            {request.status === 'aprovado' && request.status_execucao === 'em_andamento' && currentUser.role === 'prefeito' && (
+                                <div className="flex gap-2 pt-3 border-t border-slate-100 dark:border-slate-700">
+                                    <button
+                                        onClick={() => handleUpdateExecutionStatus(request.id, 'concluido')}
+                                        disabled={processingId === request.id}
+                                        className="flex-1 flex items-center justify-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-2.5 px-4 rounded-lg transition-colors disabled:opacity-50"
+                                    >
+                                        {processingId === request.id ? (
+                                            <div className="size-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                                        ) : (
+                                            <>
+                                                <span className="material-symbols-outlined text-lg">task_alt</span>
+                                                Concluir
+                                            </>
+                                        )}
+                                    </button>
+                                    <button
+                                        onClick={() => handleUpdateExecutionStatus(request.id, 'nao_realizado')}
+                                        disabled={processingId === request.id}
+                                        className="flex-1 flex items-center justify-center gap-2 bg-slate-500 hover:bg-slate-600 text-white font-bold py-2.5 px-4 rounded-lg transition-colors disabled:opacity-50"
+                                    >
+                                        {processingId === request.id ? (
+                                            <div className="size-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                                        ) : (
+                                            <>
+                                                <span className="material-symbols-outlined text-lg">block</span>
+                                                Não Realizado
                                             </>
                                         )}
                                     </button>

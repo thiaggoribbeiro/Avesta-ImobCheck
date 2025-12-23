@@ -167,6 +167,16 @@ const PropertyDetails: React.FC<PropertyDetailsProps> = ({ property, userId, onS
                 bg: 'bg-red-50 dark:bg-red-900/20',
                 border: 'border-red-100 dark:border-red-800',
                 text: 'text-red-600 dark:text-red-400'
+              },
+              cyan: {
+                bg: 'bg-cyan-50 dark:bg-cyan-900/20',
+                border: 'border-cyan-100 dark:border-cyan-800',
+                text: 'text-cyan-600 dark:text-cyan-400'
+              },
+              slate: {
+                bg: 'bg-slate-50 dark:bg-slate-900/20',
+                border: 'border-slate-100 dark:border-slate-800',
+                text: 'text-slate-600 dark:text-slate-400'
               }
             };
             const colors = colorMap[item.colorClass] || colorMap.blue;

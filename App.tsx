@@ -11,6 +11,7 @@ import UserManagement from './components/UserManagement';
 import ServiceRequests from './components/ServiceRequests';
 import Dashboard from './components/Dashboard';
 import Layout from './components/Layout';
+import PropertyForm from './components/PropertyForm';
 import { supabase } from './services/supabaseClient';
 
 const App: React.FC = () => {
@@ -22,55 +23,61 @@ const App: React.FC = () => {
   const [fetchingProperties, setFetchingProperties] = useState(false);
 
   useEffect(() => {
-    // Check active sessions and subscribe to auth changes
+    let mounted = true;
+
     const checkUser = async () => {
-      // Safety timeout to ensure loading spinner disappears even if Supabase hangs
       const timeoutId = setTimeout(() => {
-        setLoading(false);
-      }, 60000);
+        if (mounted) setLoading(false);
+      }, 15000); // 15s timeout para o check inicial
 
       try {
         const { data: { session } } = await supabase.auth.getSession();
 
-        if (session?.user) {
-          const { data: profile, error: profileError } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', session.user.id)
-            .single();
+        if (session?.user && mounted) {
+          const profileFetch = supabase.from('profiles').select('*').eq('id', session.user.id).single();
+          const profileTimeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout Profile')), 20000));
 
-          if (profile) {
+          const { data: profile } = await Promise.race([profileFetch, profileTimeout]) as any;
+
+          if (profile && mounted) {
             setUser(profile);
             setCurrentView('list');
-          } else if (profileError) {
-            console.error('Erro ao buscar perfil:', profileError);
           }
-        } else {
+        } else if (mounted) {
           setCurrentView('login');
         }
       } catch (err) {
-        console.error('Erro na verificação de usuário:', err);
+        console.error('App Profile Load Error:', err);
       } finally {
-        clearTimeout(timeoutId);
-        setLoading(false);
+        if (mounted) {
+          clearTimeout(timeoutId);
+          setLoading(false);
+        }
       }
     };
 
     checkUser();
 
     const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (session?.user) {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', session.user.id)
-          .single();
+      if (!mounted) return;
 
-        if (profile) {
-          setUser(profile);
-          setCurrentView('list');
+      if (session?.user) {
+        if (currentView === 'login' || !user) {
+          try {
+            const profileFetch = supabase.from('profiles').select('*').eq('id', session.user.id).single();
+            const profileTimeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout Auth Update')), 20000));
+
+            const { data: profile } = await Promise.race([profileFetch, profileTimeout]) as any;
+
+            if (profile && mounted) {
+              setUser(profile);
+              setCurrentView('list');
+            }
+          } catch (err) {
+            console.error('Auth State Profile Load Error:', err);
+          }
         }
-      } else {
+      } else if (mounted) {
         setUser(null);
         setCurrentView('login');
         setProperties([]);
@@ -78,6 +85,7 @@ const App: React.FC = () => {
     });
 
     return () => {
+      mounted = false;
       authListener.subscription.unsubscribe();
     };
   }, []);
@@ -101,25 +109,32 @@ const App: React.FC = () => {
   };
 
   const handleSaveService = (propertyId: string, description: string, date: string) => {
-    setProperties(prev => prev.map(p => {
-      if (p.id === propertyId) {
-        const newRecord = {
-          id: `m${Date.now()}`,
-          type: 'other' as const,
-          title: 'Novo Registro',
-          description,
-          date: new Date(date).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' }),
-          status: 'Concluído' as const,
-          icon: 'build',
-          colorClass: 'blue'
-        };
-        return {
-          ...p,
-          maintenanceHistory: [newRecord, ...p.maintenanceHistory]
-        };
-      }
-      return p;
-    }));
+    // ... logic for local update if needed
+  };
+
+  const handleSaveProperty = async (propertyData: Partial<Property>) => {
+    if (!user) return;
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('properties')
+        .insert([{
+          ...propertyData,
+          created_at: new Date().toISOString()
+        }])
+        .select();
+
+      if (error) throw error;
+
+      console.log('Imóvel salvo com sucesso!');
+      await fetchProperties(); // Atualiza a lista
+      setCurrentView('list');
+    } catch (err) {
+      console.error('Erro ao salvar imóvel:', err);
+      alert('Erro ao salvar imóvel. Verifique os dados ou sua conexão.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const fetchProperties = async () => {
@@ -142,23 +157,66 @@ const App: React.FC = () => {
         return;
       }
 
-      const { data, error: _error } = await query;
+      const { data: propertiesData, error: propertiesError } = await query;
+      if (propertiesError) throw propertiesError;
 
-      const formattedProperties: Property[] = (data || []).map(p => ({
-        id: p.id,
-        utilizacao: p.utilizacao,
-        situacao: p.situacao,
-        nome_completo: p.nome_completo,
-        endereco: p.endereco,
-        bairro: p.bairro,
-        cidade: p.cidade,
-        estado: p.estado,
-        regiao: p.regiao,
-        proprietario: p.proprietario,
-        prefeito: p.prefeito,
-        image_url: p.image_url || '/assets/default-property.png',
-        maintenanceHistory: []
-      }));
+      // Buscar requisições aprovadas/em andamento/concluídas para compor o histórico
+      const { data: servicesData, error: servicesError } = await supabase
+        .from('service_requests')
+        .select('*')
+        .in('status', ['em_andamento', 'concluido', 'nao_realizado'])
+        .order('approved_at', { ascending: false });
+
+      if (servicesError) {
+        console.error('Erro ao buscar serviços aprovados:', servicesError);
+      }
+
+      const getServiceMeta = (type: string) => {
+        switch (type) {
+          case 'reparo': return { icon: 'build', color: 'blue' };
+          case 'reforma': return { icon: 'construction', color: 'orange' };
+          case 'pintura': return { icon: 'format_paint', color: 'green' };
+          case 'limpeza': return { icon: 'cleaning_services', color: 'cyan' };
+          case 'obra': return { icon: 'engineering', color: 'purple' };
+          default: return { icon: 'miscellaneous_services', color: 'slate' };
+        }
+      };
+
+      const formattedProperties: Property[] = (propertiesData || []).map(p => {
+        const propertyServices = (servicesData || [])
+          .filter(s => s.property_id === p.id)
+          .map(s => {
+            const meta = getServiceMeta(s.service_type);
+            return {
+              id: s.id,
+              type: 'other' as const,
+              title: s.title,
+              description: s.description,
+              date: new Date(s.approved_at || s.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' }),
+              status: (s.status_execucao === 'em_andamento' ? 'Em Andamento' :
+                s.status_execucao === 'concluido' ? 'Concluído' :
+                  s.status_execucao === 'nao_realizado' ? 'Não Realizado' : 'Aprovado') as any,
+              icon: meta.icon,
+              colorClass: meta.color
+            };
+          });
+
+        return {
+          id: p.id,
+          utilizacao: p.utilizacao,
+          situacao: p.situacao,
+          nome_completo: p.nome_completo,
+          endereco: p.endereco,
+          bairro: p.bairro,
+          cidade: p.cidade,
+          estado: p.estado,
+          regiao: p.regiao,
+          proprietario: p.proprietario,
+          prefeito: p.prefeito,
+          image_url: p.image_url || '/assets/default-property.png',
+          maintenanceHistory: propertyServices
+        };
+      });
 
       setProperties(formattedProperties);
     } catch (err) {
@@ -213,6 +271,13 @@ const App: React.FC = () => {
         onBack: () => setCurrentView('list'),
       };
     }
+    if (currentView === 'add-property') {
+      return {
+        title: 'Novo Imóvel',
+        showBack: true,
+        onBack: () => setCurrentView('list'),
+      };
+    }
     if (currentView === 'dashboard') {
       return {
         title: 'Dashboard',
@@ -231,9 +296,14 @@ const App: React.FC = () => {
           >
             <span className="material-symbols-outlined text-xl">logout</span>
           </button>
-          <button className="flex items-center justify-center rounded-full size-10 bg-primary/10 text-primary hover:bg-primary hover:text-white transition-all duration-300 active:scale-95 shadow-sm">
-            <span className="material-symbols-outlined text-2xl">add</span>
-          </button>
+          {(user?.role === 'admin' || user?.role === 'gestor') && (
+            <button
+              onClick={() => setCurrentView('add-property')}
+              className="flex items-center justify-center rounded-full size-10 bg-primary/10 text-primary hover:bg-primary hover:text-white transition-all duration-300 active:scale-95 shadow-sm"
+            >
+              <span className="material-symbols-outlined text-2xl">add</span>
+            </button>
+          )}
         </div>
       )
     };
@@ -270,12 +340,22 @@ const App: React.FC = () => {
         />
       )}
 
-      {currentView === 'settings' && user && (
-        <UserManagement currentUser={user} />
+      {currentView === 'settings' && (
+        <div className="flex flex-col items-center justify-center h-64 px-12 text-center">
+          <span className="material-symbols-outlined text-6xl text-slate-200 dark:text-slate-700 mb-4">settings</span>
+          <p className="text-slate-400 dark:text-slate-500 font-medium">As configurações estarão disponíveis em breve.</p>
+        </div>
       )}
 
       {currentView === 'services' && user && (
         <ServiceRequests currentUser={user} />
+      )}
+
+      {currentView === 'add-property' && (
+        <PropertyForm
+          onSave={handleSaveProperty}
+          onCancel={() => setCurrentView('list')}
+        />
       )}
 
       {currentView === 'dashboard' && user && (

@@ -26,7 +26,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
     if (mode === 'login') {
       const timeoutId = setTimeout(() => {
         setLoading(false);
-        setError('A conexão com o servidor está levando muito tempo. Tente novamente.');
+        setError('A conexão com o servidor está levando muito tempo. Verifique sua rede.');
       }, 60000);
 
       try {

@@ -159,8 +159,10 @@ const UserManagement: React.FC<UserManagementProps> = ({ currentUser }) => {
             setShowAddModal(false);
             fetchUsers();
         } catch (err: any) {
-            console.error('Erro ao salvar usuário:', err);
-            setError(err.message || 'Database error saving new user');
+            console.error('Erro detalhado ao salvar usuário:', err);
+            const errorMessage = err.message || 'Erro desconhecido';
+            const errorCode = err.code ? ` (Erro: ${err.code})` : '';
+            setError(`Erro ao salvar usuário: ${errorMessage}${errorCode}`);
         } finally {
             setSaving(false);
         }
