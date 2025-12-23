@@ -399,11 +399,8 @@ const App: React.FC = () => {
     };
   };
 
-  const layoutProps = getLayoutProps();
 
-  if (currentView === 'login') {
-    return <Login onLogin={() => { }} />;
-  }
+  const layoutProps = getLayoutProps();
 
 
   return (
