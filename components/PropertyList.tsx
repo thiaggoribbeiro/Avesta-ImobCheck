@@ -11,10 +11,12 @@ interface PropertyListProps {
 const PropertyList: React.FC<PropertyListProps> = ({ properties, onSelect }) => {
   const [searchTerm, setSearchTerm] = useState('');
 
-  const filteredProperties = properties.filter(p =>
-    p.nome_completo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    p.endereco.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredProperties = properties
+    .filter(p =>
+      p.nome_completo.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      p.endereco.toLowerCase().includes(searchTerm.toLowerCase())
+    )
+    .sort((a, b) => a.endereco.trim().localeCompare(b.endereco.trim(), 'pt-BR'));
 
   return (
     <div className="flex flex-col w-full">

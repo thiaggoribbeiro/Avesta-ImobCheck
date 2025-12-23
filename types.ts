@@ -45,7 +45,8 @@ export interface ServiceRequest {
   service_type: 'reparo' | 'reforma' | 'pintura' | 'limpeza' | 'obra' | 'outro';
   photos: string[];
   status: 'pendente' | 'aprovado' | 'rejeitado';
-  status_execucao?: 'em_andamento' | 'concluido' | 'nao_realizado';
+  status_execucao?: 'em_andamento' | 'concluido' | 'nao_realizado' | 'paralisado';
+  observacao_execucao?: string;
   approved_by?: string;
   approved_at?: string;
   rejection_reason?: string;

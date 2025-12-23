@@ -21,6 +21,7 @@ const App: React.FC = () => {
   const [properties, setProperties] = useState<Property[]>([]);
   const [loading, setLoading] = useState(true);
   const [fetchingProperties, setFetchingProperties] = useState(false);
+  const [notificationCount, setNotificationCount] = useState(0);
 
   useEffect(() => {
     let mounted = true;
@@ -105,7 +106,23 @@ const App: React.FC = () => {
   };
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
+    try {
+      setLoading(true);
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        console.error('Erro ao fazer logout:', error);
+        // Force logout even if there's an error
+      }
+    } catch (err) {
+      console.error('Erro ao fazer logout:', err);
+    } finally {
+      // Force state cleanup regardless of API response
+      setUser(null);
+      setProperties([]);
+      setSelectedProperty(null);
+      setCurrentView('login');
+      setLoading(false);
+    }
   };
 
   const handleSaveService = (propertyId: string, description: string, date: string) => {
@@ -160,11 +177,11 @@ const App: React.FC = () => {
       const { data: propertiesData, error: propertiesError } = await query;
       if (propertiesError) throw propertiesError;
 
-      // Buscar requisições aprovadas/em andamento/concluídas para compor o histórico
+      // Buscar requisições aprovadas para compor o histórico
       const { data: servicesData, error: servicesError } = await supabase
         .from('service_requests')
         .select('*')
-        .in('status', ['em_andamento', 'concluido', 'nao_realizado'])
+        .eq('status', 'aprovado')
         .order('approved_at', { ascending: false });
 
       if (servicesError) {
@@ -232,6 +249,68 @@ const App: React.FC = () => {
     }
   }, [user, currentView]);
 
+  // Fetch notifications based on user role
+  const fetchNotifications = async () => {
+    if (!user) return;
+    try {
+      let count = 0;
+      const lastSeenKey = `notifications_last_seen_${user.id}`;
+      const lastSeen = localStorage.getItem(lastSeenKey);
+      const lastSeenDate = lastSeen ? new Date(lastSeen).toISOString() : new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+
+      if (user.role === 'admin' || user.role === 'gestor') {
+        // For gestores: count pending requests + recently updated execution status
+        const { count: pendingCount } = await supabase
+          .from('service_requests')
+          .select('*', { count: 'exact', head: true })
+          .eq('status', 'pendente')
+          .gte('created_at', lastSeenDate);
+
+        const { count: updatedCount } = await supabase
+          .from('service_requests')
+          .select('*', { count: 'exact', head: true })
+          .eq('status', 'aprovado')
+          .in('status_execucao', ['paralisado', 'concluido', 'nao_realizado'])
+          .gte('updated_at', lastSeenDate);
+
+        count = (pendingCount || 0) + (updatedCount || 0);
+      } else if (user.role === 'prefeito') {
+        // For prefeitos: count their approved/rejected requests since last seen
+        const { count: responseCount } = await supabase
+          .from('service_requests')
+          .select('*', { count: 'exact', head: true })
+          .eq('requester_id', user.id)
+          .in('status', ['aprovado', 'rejeitado'])
+          .gte('approved_at', lastSeenDate);
+
+        count = responseCount || 0;
+      }
+
+      setNotificationCount(count);
+    } catch (err) {
+      console.error('Erro ao buscar notificações:', err);
+    }
+  };
+
+  // Mark notifications as seen when navigating to services
+  const handleNavigate = (view: string) => {
+    if (view === 'services' && user) {
+      const lastSeenKey = `notifications_last_seen_${user.id}`;
+      localStorage.setItem(lastSeenKey, new Date().toISOString());
+      setNotificationCount(0);
+    }
+    setCurrentView(view as View);
+  };
+
+  useEffect(() => {
+    if (user) {
+      fetchNotifications();
+      // Refresh notifications every 30 seconds
+      const interval = setInterval(fetchNotifications, 30000);
+      return () => clearInterval(interval);
+    }
+  }, [user]);
+
 
   if (loading) {
     return (
@@ -291,6 +370,17 @@ const App: React.FC = () => {
       actions: (
         <div className="flex items-center gap-2">
           <button
+            onClick={() => handleNavigate('services')}
+            className="relative flex items-center justify-center rounded-full size-10 bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600 transition-all"
+          >
+            <span className="material-symbols-outlined text-xl">notifications</span>
+            {notificationCount > 0 && (
+              <span className="absolute -top-1 -right-1 flex items-center justify-center min-w-5 h-5 px-1 bg-red-500 text-white text-xs font-bold rounded-full">
+                {notificationCount > 99 ? '99+' : notificationCount}
+              </span>
+            )}
+          </button>
+          <button
             onClick={handleLogout}
             className="flex items-center justify-center rounded-full size-10 bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600 transition-all"
           >
@@ -323,7 +413,7 @@ const App: React.FC = () => {
       onLogout={handleLogout}
       activeView={currentView}
       userRole={user?.role || 'prefeito'}
-      onNavigate={(view) => setCurrentView(view as View)}
+      onNavigate={handleNavigate}
     >
       {currentView === 'list' && (
         <PropertyList

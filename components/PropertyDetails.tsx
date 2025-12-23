@@ -16,6 +16,9 @@ const PropertyDetails: React.FC<PropertyDetailsProps> = ({ property, userId, onS
   const [desc, setDesc] = useState('');
   const [serviceType, setServiceType] = useState<'reparo' | 'reforma' | 'pintura' | 'limpeza' | 'obra' | 'outro'>('reparo');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [valorOrcamento, setValorOrcamento] = useState('');
+  const [pdfFile, setPdfFile] = useState<File | null>(null);
+  const [uploadingPdf, setUploadingPdf] = useState(false);
   const [aiInsight, setAiInsight] = useState<string | null>(null);
   const [loadingAI, setLoadingAI] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -36,6 +39,28 @@ const PropertyDetails: React.FC<PropertyDetailsProps> = ({ property, userId, onS
 
     setSubmitting(true);
     try {
+      let documentoUrl = null;
+
+      // Upload PDF if exists
+      if (pdfFile) {
+        setUploadingPdf(true);
+        const fileName = `${Date.now()}_${pdfFile.name}`;
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('documentos')
+          .upload(`service-requests/${fileName}`, pdfFile);
+
+        if (uploadError) {
+          console.error('Erro ao fazer upload:', uploadError);
+          // Continue without the file
+        } else {
+          const { data: urlData } = supabase.storage
+            .from('documentos')
+            .getPublicUrl(`service-requests/${fileName}`);
+          documentoUrl = urlData.publicUrl;
+        }
+        setUploadingPdf(false);
+      }
+
       const { error } = await supabase
         .from('service_requests')
         .insert({
@@ -44,7 +69,9 @@ const PropertyDetails: React.FC<PropertyDetailsProps> = ({ property, userId, onS
           title: title,
           description: desc,
           service_type: serviceType,
-          status: 'pendente'
+          status: 'pendente',
+          valor: valorOrcamento ? parseFloat(valorOrcamento.replace(',', '.')) : null,
+          documento_url: documentoUrl
         });
 
       if (error) throw error;
@@ -53,6 +80,8 @@ const PropertyDetails: React.FC<PropertyDetailsProps> = ({ property, userId, onS
       setTitle('');
       setDesc('');
       setServiceType('reparo');
+      setValorOrcamento('');
+      setPdfFile(null);
 
       // Clear success message after 3 seconds
       setTimeout(() => setSuccessMessage(''), 3000);
@@ -113,26 +142,7 @@ const PropertyDetails: React.FC<PropertyDetailsProps> = ({ property, userId, onS
         </div>
       </div>
 
-      <div className="px-4">
-        <div className="bg-primary/5 dark:bg-primary/10 rounded-xl p-4 border border-primary/20">
-          <div className="flex justify-between items-center mb-2">
-            <h4 className="text-primary font-bold flex items-center gap-2">
-              <span className="material-symbols-outlined">auto_awesome</span>
-              Análise IA (Linha do Tempo)
-            </h4>
-            <button
-              onClick={handleAskAI}
-              disabled={loadingAI}
-              className="text-xs bg-primary text-white px-3 py-1.5 rounded-full font-bold hover:bg-blue-600 disabled:opacity-50 transition-all"
-            >
-              {loadingAI ? 'Analisando...' : 'Ver Insights'}
-            </button>
-          </div>
-          <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed">
-            {aiInsight || "Solicite uma análise para ver os detalhes da linha do tempo e do checklist."}
-          </p>
-        </div>
-      </div>
+
 
       <div className="flex flex-col">
         <div className="flex items-center justify-between px-4 pb-3 pt-2">
@@ -256,6 +266,54 @@ const PropertyDetails: React.FC<PropertyDetailsProps> = ({ property, userId, onS
               value={desc}
               onChange={(e) => setDesc(e.target.value)}
             />
+          </div>
+          <div className="flex flex-col gap-2">
+            <label className="text-xs font-bold uppercase text-gray-500 dark:text-gray-400 tracking-wider">Valor do Orçamento (R$)</label>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-medium">R$</span>
+              <input
+                className="block w-full rounded-lg border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-800/50 p-3 pl-10 text-sm text-[#0d141b] dark:text-white focus:border-primary focus:ring-primary transition-colors placeholder-gray-400"
+                type="text"
+                inputMode="decimal"
+                placeholder="0,00"
+                value={valorOrcamento}
+                onChange={(e) => {
+                  const value = e.target.value.replace(/[^0-9,]/g, '');
+                  setValorOrcamento(value);
+                }}
+              />
+            </div>
+          </div>
+          <div className="flex flex-col gap-2">
+            <label className="text-xs font-bold uppercase text-gray-500 dark:text-gray-400 tracking-wider">Nota Fiscal / Orçamento</label>
+            <label className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-6 flex flex-col items-center justify-center gap-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50 hover:border-primary/50 transition-all group">
+              <input
+                type="file"
+                accept=".pdf"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file && file.type === 'application/pdf') {
+                    setPdfFile(file);
+                  } else if (file) {
+                    alert('Por favor, selecione um arquivo PDF.');
+                  }
+                }}
+              />
+              <div className={`p-3 rounded-full group-hover:scale-110 transition-transform duration-300 ${pdfFile ? 'bg-emerald-100' : 'bg-primary/10'}`}>
+                <span className={`material-symbols-outlined text-2xl ${pdfFile ? 'text-emerald-600' : 'text-primary'}`}>
+                  {pdfFile ? 'check_circle' : 'upload_file'}
+                </span>
+              </div>
+              {pdfFile ? (
+                <p className="text-sm font-medium text-emerald-600 dark:text-emerald-400 flex items-center gap-2">
+                  <span className="material-symbols-outlined text-lg">description</span>
+                  {pdfFile.name}
+                </p>
+              ) : (
+                <p className="text-sm font-medium text-gray-500 dark:text-gray-400 group-hover:text-primary transition-colors">Toque para anexar PDF</p>
+              )}
+            </label>
           </div>
           <div className="flex flex-col gap-2">
             <label className="text-xs font-bold uppercase text-gray-500 dark:text-gray-400 tracking-wider">Fotos</label>
