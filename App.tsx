@@ -177,12 +177,12 @@ const App: React.FC = () => {
       const { data: propertiesData, error: propertiesError } = await query;
       if (propertiesError) throw propertiesError;
 
-      // Buscar requisições aprovadas para compor o histórico
+      // Buscar requisições aprovadas e rejeitadas para compor o histórico
       const { data: servicesData, error: servicesError } = await supabase
         .from('service_requests')
         .select('*')
-        .eq('status', 'aprovado')
-        .order('approved_at', { ascending: false });
+        .in('status', ['aprovado', 'rejeitado'])
+        .order('updated_at', { ascending: false });
 
       if (servicesError) {
         console.error('Erro ao buscar serviços aprovados:', servicesError);
@@ -204,17 +204,30 @@ const App: React.FC = () => {
           .filter(s => s.property_id === p.id)
           .map(s => {
             const meta = getServiceMeta(s.service_type);
+
+            // Determinar o status de exibição
+            let displayStatus = 'Aprovado';
+            if (s.status === 'rejeitado') {
+              displayStatus = 'Rejeitado';
+            } else if (s.status_execucao === 'concluido') {
+              displayStatus = 'Concluído';
+            } else if (s.status_execucao === 'nao_realizado') {
+              displayStatus = 'Não Realizado';
+            } else if (s.status_execucao === 'paralisado') {
+              displayStatus = 'Paralisado';
+            } else if (s.status_execucao === 'em_andamento') {
+              displayStatus = 'Em Andamento';
+            }
+
             return {
               id: s.id,
               type: 'other' as const,
               title: s.title,
               description: s.description,
-              date: new Date(s.approved_at || s.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' }),
-              status: (s.status_execucao === 'em_andamento' ? 'Em Andamento' :
-                s.status_execucao === 'concluido' ? 'Concluído' :
-                  s.status_execucao === 'nao_realizado' ? 'Não Realizado' : 'Aprovado') as any,
+              date: new Date(s.updated_at || s.approved_at || s.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' }),
+              status: displayStatus as any,
               icon: meta.icon,
-              colorClass: meta.color
+              colorClass: s.status === 'rejeitado' ? 'red' : meta.color
             };
           });
 
