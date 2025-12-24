@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { ServiceRequest, User } from '../types';
 import { supabase } from '../services/supabaseClient';
+import ServiceDetailModal from './ServiceDetailModal';
 
 interface ServiceRequestsProps {
     currentUser: User;
@@ -15,6 +16,7 @@ const ServiceRequests: React.FC<ServiceRequestsProps> = ({ currentUser }) => {
     const [showObservationModal, setShowObservationModal] = useState<{ requestId: string; status: 'nao_realizado' | 'paralisado' } | null>(null);
     const [observationText, setObservationText] = useState('');
     const [categoryCounts, setCategoryCounts] = useState<{ pendente: number; aprovado: number; rejeitado: number; finalizado: number }>({ pendente: 0, aprovado: 0, rejeitado: 0, finalizado: 0 });
+    const [selectedRequest, setSelectedRequest] = useState<(ServiceRequest & { property_address?: string; requester_name?: string }) | null>(null);
 
     useEffect(() => {
         fetchRequests();
@@ -23,10 +25,18 @@ const ServiceRequests: React.FC<ServiceRequestsProps> = ({ currentUser }) => {
 
     const fetchCategoryCounts = async () => {
         try {
-            const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+            // Obter timestamps de última visualização por categoria do localStorage
+            const getLastSeen = (category: string) => {
+                const key = `category_last_seen_${currentUser.id}_${category}`;
+                const lastSeen = localStorage.getItem(key);
+                return lastSeen ? new Date(lastSeen).toISOString() : new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+            };
 
             // For prefeitos: count their recent approved/rejected requests
             if (currentUser.role === 'prefeito') {
+                const aprovadoLastSeen = getLastSeen('aprovado');
+                const rejeitadoLastSeen = getLastSeen('rejeitado');
+
                 const [aprovadosRes, rejeitadosRes] = await Promise.all([
                     supabase
                         .from('service_requests')
@@ -34,13 +44,13 @@ const ServiceRequests: React.FC<ServiceRequestsProps> = ({ currentUser }) => {
                         .eq('requester_id', currentUser.id)
                         .eq('status', 'aprovado')
                         .eq('status_execucao', 'em_andamento')
-                        .gte('approved_at', sevenDaysAgo),
+                        .gte('approved_at', aprovadoLastSeen),
                     supabase
                         .from('service_requests')
                         .select('*', { count: 'exact', head: true })
                         .eq('requester_id', currentUser.id)
                         .eq('status', 'rejeitado')
-                        .gte('approved_at', sevenDaysAgo)
+                        .gte('approved_at', rejeitadoLastSeen)
                 ]);
 
                 setCategoryCounts(prev => ({
@@ -50,17 +60,21 @@ const ServiceRequests: React.FC<ServiceRequestsProps> = ({ currentUser }) => {
                 }));
             } else {
                 // For gestores: count pending and recently updated
+                const pendenteLastSeen = getLastSeen('pendente');
+                const finalizadoLastSeen = getLastSeen('finalizado');
+
                 const [pendentesRes, atualizadosRes] = await Promise.all([
                     supabase
                         .from('service_requests')
                         .select('*', { count: 'exact', head: true })
-                        .eq('status', 'pendente'),
+                        .eq('status', 'pendente')
+                        .gte('created_at', pendenteLastSeen),
                     supabase
                         .from('service_requests')
                         .select('*', { count: 'exact', head: true })
                         .eq('status', 'aprovado')
                         .in('status_execucao', ['concluido', 'nao_realizado', 'paralisado'])
-                        .gte('updated_at', sevenDaysAgo)
+                        .gte('updated_at', finalizadoLastSeen)
                 ]);
 
                 setCategoryCounts(prev => ({
@@ -279,26 +293,33 @@ const ServiceRequests: React.FC<ServiceRequestsProps> = ({ currentUser }) => {
                 </div>
 
                 {/* Filtros */}
-                <div className="flex gap-2 overflow-x-auto pb-2 pt-3 -mt-1" style={{ overflow: 'visible' }}>
-                    {(['pendente', 'aprovado', 'finalizado', 'rejeitado', 'todos'] as const).map((f) => {
-                        const count = f === 'todos' ? 0 : categoryCounts[f] || 0;
+                <div className="flex justify-center gap-2 pb-2 pt-3 -mt-1">
+                    {(['pendente', 'aprovado', 'finalizado', 'rejeitado'] as const).map((f) => {
+                        const count = categoryCounts[f] || 0;
                         const showBadge = currentUser.role === 'prefeito'
-                            ? (f === 'aprovado' || f === 'rejeitado') && count > 0
-                            : (f === 'pendente' || f === 'finalizado') && count > 0;
+                            ? (f === 'aprovado' || f === 'rejeitado') && count > 0 && filter !== f
+                            : (f === 'pendente' || f === 'finalizado') && count > 0 && filter !== f;
+
+                        const handleFilterClick = () => {
+                            setFilter(f);
+                            const key = `category_last_seen_${currentUser.id}_${f}`;
+                            localStorage.setItem(key, new Date().toISOString());
+                            setCategoryCounts(prev => ({ ...prev, [f]: 0 }));
+                        };
 
                         return (
                             <button
                                 key={f}
-                                onClick={() => setFilter(f)}
-                                className={`relative px-4 py-2 rounded-lg text-sm font-bold whitespace-nowrap transition-colors ${filter === f
+                                onClick={handleFilterClick}
+                                className={`relative px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-colors ${filter === f
                                     ? 'bg-primary text-white'
-                                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
                                     }`}
                             >
-                                {f === 'pendente' ? 'Pendentes' : f === 'aprovado' ? 'Aprovados' : f === 'finalizado' ? 'Finalizados' : f === 'rejeitado' ? 'Rejeitados' : 'Todos'}
+                                {f === 'pendente' ? 'Pendentes' : f === 'aprovado' ? 'Aprovados' : f === 'finalizado' ? 'Finalizados' : 'Rejeitados'}
                                 {showBadge && (
-                                    <span className="absolute -top-2 -right-2 flex items-center justify-center min-w-5 h-5 px-1 bg-red-500 text-white text-xs font-bold rounded-full">
-                                        {count > 99 ? '99+' : count}
+                                    <span className="absolute -top-1.5 -right-1.5 flex items-center justify-center min-w-4 h-4 px-1 bg-red-500 text-white text-[10px] font-bold rounded-full">
+                                        {count > 9 ? '9+' : count}
                                     </span>
                                 )}
                             </button>
@@ -317,7 +338,8 @@ const ServiceRequests: React.FC<ServiceRequestsProps> = ({ currentUser }) => {
                         requests.map(request => (
                             <div
                                 key={request.id}
-                                className="bg-white dark:bg-slate-800 rounded-xl p-4 shadow-sm border border-slate-200 dark:border-slate-700"
+                                onClick={() => setSelectedRequest(request)}
+                                className="bg-white dark:bg-slate-800 rounded-xl p-4 shadow-sm border border-slate-200 dark:border-slate-700 cursor-pointer hover:shadow-md hover:border-primary/30 transition-all active:scale-[0.99]"
                             >
                                 <div className="flex items-start justify-between gap-3 mb-3">
                                     <div className="flex-1 min-w-0">
@@ -359,7 +381,10 @@ const ServiceRequests: React.FC<ServiceRequestsProps> = ({ currentUser }) => {
                                 {request.status === 'pendente' && currentUser.role !== 'prefeito' && (
                                     <div className="flex gap-2 pt-3 border-t border-slate-100 dark:border-slate-700">
                                         <button
-                                            onClick={() => handleApprove(request.id)}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleApprove(request.id);
+                                            }}
                                             disabled={processingId === request.id}
                                             className="flex-1 flex items-center justify-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-2.5 px-4 rounded-lg transition-colors disabled:opacity-50"
                                         >
@@ -373,7 +398,10 @@ const ServiceRequests: React.FC<ServiceRequestsProps> = ({ currentUser }) => {
                                             )}
                                         </button>
                                         <button
-                                            onClick={() => handleReject(request.id)}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleReject(request.id);
+                                            }}
                                             disabled={processingId === request.id}
                                             className="flex-1 flex items-center justify-center gap-2 bg-red-500 hover:bg-red-600 text-white font-bold py-2.5 px-4 rounded-lg transition-colors disabled:opacity-50"
                                         >
@@ -393,7 +421,10 @@ const ServiceRequests: React.FC<ServiceRequestsProps> = ({ currentUser }) => {
                                     <div className="flex flex-col gap-2 pt-3 border-t border-slate-100 dark:border-slate-700">
                                         <div className="flex gap-2">
                                             <button
-                                                onClick={() => handleUpdateExecutionStatus(request.id, 'concluido')}
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleUpdateExecutionStatus(request.id, 'concluido');
+                                                }}
                                                 disabled={processingId === request.id}
                                                 className="flex-1 flex items-center justify-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-2.5 px-4 rounded-lg transition-colors disabled:opacity-50"
                                             >
@@ -409,7 +440,10 @@ const ServiceRequests: React.FC<ServiceRequestsProps> = ({ currentUser }) => {
                                         </div>
                                         <div className="flex gap-2">
                                             <button
-                                                onClick={() => openObservationModal(request.id, 'nao_realizado')}
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    openObservationModal(request.id, 'nao_realizado');
+                                                }}
                                                 disabled={processingId === request.id}
                                                 className="flex-1 flex items-center justify-center gap-2 bg-slate-500 hover:bg-slate-600 text-white font-bold py-2.5 px-4 rounded-lg transition-colors disabled:opacity-50"
                                             >
@@ -417,7 +451,10 @@ const ServiceRequests: React.FC<ServiceRequestsProps> = ({ currentUser }) => {
                                                 Não Realizado
                                             </button>
                                             <button
-                                                onClick={() => openObservationModal(request.id, 'paralisado')}
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    openObservationModal(request.id, 'paralisado');
+                                                }}
                                                 disabled={processingId === request.id}
                                                 className="flex-1 flex items-center justify-center gap-2 bg-orange-500 hover:bg-orange-600 text-white font-bold py-2.5 px-4 rounded-lg transition-colors disabled:opacity-50"
                                             >
@@ -495,6 +532,13 @@ const ServiceRequests: React.FC<ServiceRequestsProps> = ({ currentUser }) => {
                         </div>
                     </div>
                 </div>
+            )}
+
+            {selectedRequest && (
+                <ServiceDetailModal
+                    request={selectedRequest}
+                    onClose={() => setSelectedRequest(null)}
+                />
             )}
         </>
     );

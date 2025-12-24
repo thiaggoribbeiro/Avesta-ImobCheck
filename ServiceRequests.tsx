@@ -14,10 +14,77 @@ const ServiceRequests: React.FC<ServiceRequestsProps> = ({ currentUser }) => {
     const [processingId, setProcessingId] = useState<string | null>(null);
     const [showObservationModal, setShowObservationModal] = useState<{ requestId: string; status: 'nao_realizado' | 'paralisado' } | null>(null);
     const [observationText, setObservationText] = useState('');
+    const [categoryCounts, setCategoryCounts] = useState<{ pendente: number; aprovado: number; rejeitado: number; finalizado: number }>({ pendente: 0, aprovado: 0, rejeitado: 0, finalizado: 0 });
 
     useEffect(() => {
         fetchRequests();
+        fetchCategoryCounts();
     }, [filter]);
+
+    const fetchCategoryCounts = async () => {
+        try {
+            // Obter timestamps de última visualização por categoria do localStorage
+            const getLastSeen = (category: string) => {
+                const key = `category_last_seen_${currentUser.id}_${category}`;
+                const lastSeen = localStorage.getItem(key);
+                return lastSeen ? new Date(lastSeen).toISOString() : new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+            };
+
+            // For prefeitos: count their recent approved/rejected requests
+            if (currentUser.role === 'prefeito') {
+                const aprovadoLastSeen = getLastSeen('aprovado');
+                const rejeitadoLastSeen = getLastSeen('rejeitado');
+
+                const [aprovadosRes, rejeitadosRes] = await Promise.all([
+                    supabase
+                        .from('service_requests')
+                        .select('*', { count: 'exact', head: true })
+                        .eq('requester_id', currentUser.id)
+                        .eq('status', 'aprovado')
+                        .eq('status_execucao', 'em_andamento')
+                        .gte('approved_at', aprovadoLastSeen),
+                    supabase
+                        .from('service_requests')
+                        .select('*', { count: 'exact', head: true })
+                        .eq('requester_id', currentUser.id)
+                        .eq('status', 'rejeitado')
+                        .gte('approved_at', rejeitadoLastSeen)
+                ]);
+
+                setCategoryCounts(prev => ({
+                    ...prev,
+                    aprovado: aprovadosRes.count || 0,
+                    rejeitado: rejeitadosRes.count || 0
+                }));
+            } else {
+                // For gestores: count pending and recently updated
+                const pendenteLastSeen = getLastSeen('pendente');
+                const finalizadoLastSeen = getLastSeen('finalizado');
+
+                const [pendentesRes, atualizadosRes] = await Promise.all([
+                    supabase
+                        .from('service_requests')
+                        .select('*', { count: 'exact', head: true })
+                        .eq('status', 'pendente')
+                        .gte('created_at', pendenteLastSeen),
+                    supabase
+                        .from('service_requests')
+                        .select('*', { count: 'exact', head: true })
+                        .eq('status', 'aprovado')
+                        .in('status_execucao', ['concluido', 'nao_realizado', 'paralisado'])
+                        .gte('updated_at', finalizadoLastSeen)
+                ]);
+
+                setCategoryCounts(prev => ({
+                    ...prev,
+                    pendente: pendentesRes.count || 0,
+                    finalizado: atualizadosRes.count || 0
+                }));
+            }
+        } catch (err) {
+            console.error('Erro ao buscar contagens:', err);
+        }
+    };
 
     const fetchRequests = async () => {
         setLoading(true);
@@ -224,19 +291,38 @@ const ServiceRequests: React.FC<ServiceRequestsProps> = ({ currentUser }) => {
                 </div>
 
                 {/* Filtros */}
-                <div className="flex gap-2 overflow-x-auto pb-2">
-                    {(['pendente', 'aprovado', 'finalizado', 'rejeitado', 'todos'] as const).map((f) => (
-                        <button
-                            key={f}
-                            onClick={() => setFilter(f)}
-                            className={`px-4 py-2 rounded-lg text-sm font-bold whitespace-nowrap transition-colors ${filter === f
-                                ? 'bg-primary text-white'
-                                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
-                                }`}
-                        >
-                            {f === 'pendente' ? 'Pendentes' : f === 'aprovado' ? 'Aprovados' : f === 'finalizado' ? 'Finalizados' : f === 'rejeitado' ? 'Rejeitados' : 'Todos'}
-                        </button>
-                    ))}
+                <div className="flex justify-center gap-2 pb-2 pt-3 -mt-1">
+                    {(['pendente', 'aprovado', 'finalizado', 'rejeitado'] as const).map((f) => {
+                        const count = categoryCounts[f] || 0;
+                        const showBadge = currentUser.role === 'prefeito'
+                            ? (f === 'aprovado' || f === 'rejeitado') && count > 0 && filter !== f
+                            : (f === 'pendente' || f === 'finalizado') && count > 0 && filter !== f;
+
+                        const handleFilterClick = () => {
+                            setFilter(f);
+                            const key = `category_last_seen_${currentUser.id}_${f}`;
+                            localStorage.setItem(key, new Date().toISOString());
+                            setCategoryCounts(prev => ({ ...prev, [f]: 0 }));
+                        };
+
+                        return (
+                            <button
+                                key={f}
+                                onClick={handleFilterClick}
+                                className={`relative px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-colors ${filter === f
+                                    ? 'bg-primary text-white'
+                                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
+                                    }`}
+                            >
+                                {f === 'pendente' ? 'Pendentes' : f === 'aprovado' ? 'Aprovados' : f === 'finalizado' ? 'Finalizados' : 'Rejeitados'}
+                                {showBadge && (
+                                    <span className="absolute -top-1.5 -right-1.5 flex items-center justify-center min-w-4 h-4 px-1 bg-red-500 text-white text-[10px] font-bold rounded-full">
+                                        {count > 9 ? '9+' : count}
+                                    </span>
+                                )}
+                            </button>
+                        );
+                    })}
                 </div>
 
                 {/* Lista de Requisições */}

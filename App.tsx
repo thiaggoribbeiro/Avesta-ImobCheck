@@ -188,6 +188,16 @@ const App: React.FC = () => {
         console.error('Erro ao buscar serviços aprovados:', servicesError);
       }
 
+      // Buscar histórico de visitas
+      const { data: visitsData, error: visitsError } = await supabase
+        .from('visits')
+        .select('*')
+        .order('date', { ascending: false });
+
+      if (visitsError) {
+        console.error('Erro ao buscar visitas:', visitsError);
+      }
+
       const getServiceMeta = (type: string) => {
         switch (type) {
           case 'reparo': return { icon: 'build', color: 'blue' };
@@ -231,6 +241,49 @@ const App: React.FC = () => {
             };
           });
 
+        const propertyVisits = (visitsData || [])
+          .filter(v => v.property_id === p.id);
+
+        // Calcular status da visita
+        const lastVisit = propertyVisits.length > 0
+          ? propertyVisits.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0]
+          : null;
+
+        let visitStatus: any = {
+          label: 'Visita atrasada',
+          colorClass: 'red',
+          status: 'atrasada'
+        };
+
+        if (lastVisit) {
+          const today = new Date();
+          const visitDate = new Date(lastVisit.date);
+          const diffTime = Math.abs(today.getTime() - visitDate.getTime());
+          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+          if (diffDays < 25) {
+            visitStatus = {
+              label: 'Visita em dia',
+              colorClass: 'green',
+              status: 'em_dia'
+            };
+          } else if (diffDays <= 30) {
+            const remaining = 30 - diffDays;
+            visitStatus = {
+              label: `Próx. visita em ${remaining} ${remaining === 1 ? 'dia' : 'dias'}`,
+              colorClass: 'orange',
+              status: 'alerta',
+              daysRemaining: remaining
+            };
+          } else {
+            visitStatus = {
+              label: 'Visita atrasada',
+              colorClass: 'red',
+              status: 'atrasada'
+            };
+          }
+        }
+
         return {
           id: p.id,
           utilizacao: p.utilizacao,
@@ -244,7 +297,9 @@ const App: React.FC = () => {
           proprietario: p.proprietario,
           prefeito: p.prefeito,
           image_url: p.image_url || '/assets/default-property.png',
-          maintenanceHistory: propertyServices
+          maintenanceHistory: propertyServices,
+          visitHistory: propertyVisits,
+          visitStatus: visitStatus
         };
       });
 

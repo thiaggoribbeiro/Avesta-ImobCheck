@@ -56,6 +56,21 @@ const PropertyList: React.FC<PropertyListProps> = ({ properties, onSelect }) => 
                 <p className="text-slate-400 dark:text-slate-500 text-xs font-normal line-clamp-1">
                   {property.cidade}, {property.estado} • {property.utilizacao}
                 </p>
+                {property.visitStatus && (
+                  <div className="flex mt-2">
+                    <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${property.visitStatus.status === 'em_dia'
+                        ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400'
+                        : property.visitStatus.status === 'alerta'
+                          ? 'bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400'
+                          : 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400'
+                      }`}>
+                      <span className="material-symbols-outlined text-[14px]">
+                        {property.visitStatus.status === 'em_dia' ? 'check_circle' : property.visitStatus.status === 'alerta' ? 'schedule' : 'error'}
+                      </span>
+                      {property.visitStatus.label}
+                    </span>
+                  </div>
+                )}
               </div>
               <div className="shrink-0 self-center pl-4">
                 <span className="material-symbols-outlined text-slate-400 dark:text-slate-600 group-hover:text-primary transition-colors">chevron_right</span>
