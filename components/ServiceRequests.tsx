@@ -155,6 +155,12 @@ const ServiceRequests: React.FC<ServiceRequestsProps> = ({ currentUser }) => {
 
             if (error) throw error;
             fetchRequests();
+            fetchCategoryCounts();
+
+            // Atualizar o selectedRequest se ele estiver aberto
+            if (selectedRequest && selectedRequest.id === requestId) {
+                setSelectedRequest(prev => prev ? { ...prev, status: 'aprovado', status_execucao: 'em_andamento' } : null);
+            }
         } catch (err) {
             console.error('Erro ao aprovar requisição:', err);
             alert('Erro ao aprovar requisição');
@@ -180,6 +186,12 @@ const ServiceRequests: React.FC<ServiceRequestsProps> = ({ currentUser }) => {
 
             if (error) throw error;
             fetchRequests();
+            fetchCategoryCounts();
+
+            // Atualizar o selectedRequest se ele estiver aberto
+            if (selectedRequest && selectedRequest.id === requestId) {
+                setSelectedRequest(prev => prev ? { ...prev, status: 'rejeitado', rejection_reason: reason || null } : null);
+            }
         } catch (err) {
             console.error('Erro ao rejeitar requisição:', err);
             alert('Erro ao rejeitar requisição');
@@ -207,6 +219,12 @@ const ServiceRequests: React.FC<ServiceRequestsProps> = ({ currentUser }) => {
             setShowObservationModal(null);
             setObservationText('');
             fetchRequests();
+            fetchCategoryCounts();
+
+            // Atualizar o selectedRequest se ele estiver aberto
+            if (selectedRequest && selectedRequest.id === requestId) {
+                setSelectedRequest(prev => prev ? { ...prev, status_execucao: newExecStatus, observacao_execucao: observacao } : null);
+            }
         } catch (err) {
             console.error('Erro ao atualizar status de execução:', err);
             alert('Erro ao atualizar status');
@@ -268,7 +286,9 @@ const ServiceRequests: React.FC<ServiceRequestsProps> = ({ currentUser }) => {
     };
 
     const formatDate = (dateString: string) => {
-        return new Date(dateString).toLocaleDateString('pt-BR', {
+        const d = new Date(dateString);
+        const localDate = new Date(d.getTime() + d.getTimezoneOffset() * 60000);
+        return localDate.toLocaleDateString('pt-BR', {
             day: '2-digit',
             month: 'short',
             year: 'numeric',

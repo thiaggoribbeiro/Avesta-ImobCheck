@@ -188,10 +188,10 @@ const App: React.FC = () => {
         console.error('Erro ao buscar serviços aprovados:', servicesError);
       }
 
-      // Buscar histórico de visitas
+      // Buscar histórico de visitas com os detalhes da solicitação
       const { data: visitsData, error: visitsError } = await supabase
         .from('visits')
-        .select('*')
+        .select('*, service_requests(status, title, description, service_type)')
         .order('date', { ascending: false });
 
       if (visitsError) {
@@ -246,7 +246,13 @@ const App: React.FC = () => {
 
         // Calcular status da visita
         const lastVisit = propertyVisits.length > 0
-          ? propertyVisits.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0]
+          ? propertyVisits.sort((a, b) => {
+            const dA = new Date(a.date);
+            const dB = new Date(b.date);
+            const timeA = dA.getTime() + dA.getTimezoneOffset() * 60000;
+            const timeB = dB.getTime() + dB.getTimezoneOffset() * 60000;
+            return timeB - timeA;
+          })[0]
           : null;
 
         let visitStatus: any = {
@@ -257,7 +263,11 @@ const App: React.FC = () => {
 
         if (lastVisit) {
           const today = new Date();
-          const visitDate = new Date(lastVisit.date);
+          today.setHours(0, 0, 0, 0);
+          const d = new Date(lastVisit.date);
+          const visitDate = new Date(d.getTime() + d.getTimezoneOffset() * 60000);
+          visitDate.setHours(0, 0, 0, 0);
+
           const diffTime = Math.abs(today.getTime() - visitDate.getTime());
           const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
@@ -492,6 +502,7 @@ const App: React.FC = () => {
           property={properties.find(p => p.id === selectedProperty.id) || selectedProperty}
           userId={user.id}
           onSaveService={handleSaveService}
+          onRefresh={fetchProperties}
         />
       )}
 

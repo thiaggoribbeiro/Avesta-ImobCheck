@@ -11,9 +11,10 @@ interface PropertyDetailsProps {
   property: Property;
   userId: string;
   onSaveService: (id: string, desc: string, date: string) => void;
+  onRefresh: () => void;
 }
 
-const PropertyDetails: React.FC<PropertyDetailsProps> = ({ property, userId, onSaveService }) => {
+const PropertyDetails: React.FC<PropertyDetailsProps> = ({ property, userId, onSaveService, onRefresh }) => {
   const [title, setTitle] = useState('');
   const [desc, setDesc] = useState('');
   const [serviceType, setServiceType] = useState<'reparo' | 'reforma' | 'pintura' | 'limpeza' | 'obra' | 'outro'>('reparo');
@@ -169,6 +170,9 @@ const PropertyDetails: React.FC<PropertyDetailsProps> = ({ property, userId, onS
       setVisitType('sem_intercorrencia');
       setVisitDate(new Date().toISOString().split('T')[0]);
 
+      // Recarregar dados imediatamente
+      onRefresh();
+
       // Clear success message after 3 seconds
       setTimeout(() => setSuccessMessage(''), 3000);
     } catch (err) {
@@ -242,15 +246,11 @@ const PropertyDetails: React.FC<PropertyDetailsProps> = ({ property, userId, onS
                 <div
                   className="flex flex-col items-center cursor-pointer group"
                   onClick={() => {
-                    if (item.service_request_id) {
-                      handleFetchAndShowDetails(item.service_request_id);
-                    } else {
-                      setSelectedVisit({
-                        ...item,
-                        property_address: property.endereco,
-                        prefeito_name: property.prefeito
-                      });
-                    }
+                    setSelectedVisit({
+                      ...item,
+                      property_address: property.endereco,
+                      prefeito_name: property.prefeito
+                    });
                   }}
                 >
                   <div className={`relative z-10 rounded-full ${isNoInterruption ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-100 dark:border-emerald-800' : 'bg-blue-50 dark:bg-blue-900/20 border-blue-100 dark:border-blue-800'} p-2 flex items-center justify-center transition-all group-hover:scale-110 group-hover:shadow-md`}>
@@ -265,15 +265,11 @@ const PropertyDetails: React.FC<PropertyDetailsProps> = ({ property, userId, onS
                 <div
                   className="flex flex-1 flex-col pb-6 pl-2 pt-1 cursor-pointer group"
                   onClick={() => {
-                    if (item.service_request_id) {
-                      handleFetchAndShowDetails(item.service_request_id);
-                    } else {
-                      setSelectedVisit({
-                        ...item,
-                        property_address: property.endereco,
-                        prefeito_name: property.prefeito
-                      });
-                    }
+                    setSelectedVisit({
+                      ...item,
+                      property_address: property.endereco,
+                      prefeito_name: property.prefeito
+                    });
                   }}
                 >
                   <div className="flex justify-between items-start">
@@ -283,7 +279,10 @@ const PropertyDetails: React.FC<PropertyDetailsProps> = ({ property, userId, onS
                     <span className="material-symbols-outlined text-sm text-primary opacity-0 group-hover:opacity-100 transition-opacity">info</span>
                   </div>
                   <p className="text-xs font-medium text-gray-400 dark:text-gray-500 mt-1">
-                    {new Date(item.date).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })}
+                    {(() => {
+                      const d = new Date(item.date);
+                      return new Date(d.getTime() + d.getTimezoneOffset() * 60000).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' });
+                    })()}
                   </p>
                 </div>
               </React.Fragment>

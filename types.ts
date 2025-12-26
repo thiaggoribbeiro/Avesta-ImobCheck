@@ -27,6 +27,12 @@ export interface Visit {
   date: string;
   type: 'sem_intercorrencia' | 'com_solicitacao_servico';
   service_request_id?: string;
+  service_requests?: {
+    status: string;
+    title: string;
+    description: string;
+    service_type: string;
+  };
   photos?: string[];
   created_at: string;
 }

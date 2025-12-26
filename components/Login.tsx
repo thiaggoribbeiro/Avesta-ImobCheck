@@ -270,6 +270,9 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
               </button>
             )}
           </p>
+          <p className="text-[10px] font-bold text-slate-400 dark:text-slate-600 uppercase tracking-widest mt-4">
+            Versão 1.2.0
+          </p>
         </div>
       </div>
     </div>
